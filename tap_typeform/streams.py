@@ -7,7 +7,7 @@ import singer
 from singer.bookmarks import write_bookmark, reset_stream
 from ratelimit import limits, sleep_and_retry, RateLimitException
 from backoff import on_exception, expo, constant
-
+from tap_typeform import schemas
 from tap_typeform.client import MetricsRateLimitException
 
 LOGGER = singer.get_logger()
@@ -122,7 +122,7 @@ def sync_form_definition(atx, form_id):
     write_records(atx,  form_id + '_questions', definition_data_rows)
 
 
-def sync_form(atx, form_id, start_date, end_date, token_value_last_response):
+def sync_form(atx, form_id, start_date, end_date, token_value_last_response, form_type):
     with singer.metrics.job_timer('form '+form_id):
         start = time.monotonic()
         # we've really moved this functionality to the request in the http script
@@ -149,6 +149,10 @@ def sync_form(atx, form_id, start_date, end_date, token_value_last_response):
         else:
             hidden = json.dumps(row['hidden'])
 
+        max_submitted_dt = row['submitted_at']
+        token_value_last_response = row['token']
+
+
         # the schema here reflects what we saw through testing
         # the typeform documentation is subtly inaccurate
         if form_id + '_landings' in atx.selected_stream_ids:
@@ -165,8 +169,6 @@ def sync_form(atx, form_id, start_date, end_date, token_value_last_response):
                 "hidden": hidden
             })
 
-        max_submitted_dt = row['submitted_at']
-        token_value_last_response = row['token']
 
         if row.get('answers') and form_id +'_answers' in atx.selected_stream_ids:
             for answer in row['answers']:
@@ -188,19 +190,23 @@ def sync_form(atx, form_id, start_date, end_date, token_value_last_response):
                     "answer": answer_value
                 })
 
-    if form_id +'_landings' in atx.selected_stream_ids:
-        write_records(atx, form_id +'_landings', landings_data_rows)
+
+    if  form_id +'_landings' in atx.selected_stream_ids:
+        schemas.load_and_write_schema(form_id +'_landings')
+        write_records(atx, form_id + '_landings', landings_data_rows)
+
     if form_id +'_answers' in atx.selected_stream_ids:
+        schemas.load_and_write_schema(form_id + '_answers')
         write_records(atx, form_id + '_answers', answers_data_rows)
 
     return [response['total_items'], max_submitted_dt, token_value_last_response]
 
 
-def write_forms_state(atx, form, date_to_resume, token_value_last_response):
+def write_forms_state(atx, form_id, date_to_resume, token_value_last_response):
    # write_bookmark(atx.state, form, 'date_to_resume', date_to_resume.to_datetime_string())
-    write_bookmark(atx.state, form, 'date_to_resume', date_to_resume)
+    write_bookmark(atx.state, form_id, 'date_to_resume', date_to_resume)
     if token_value_last_response is not None:
-        write_bookmark(atx.state, form, 'last_synchronised_response_token', token_value_last_response)
+        write_bookmark(atx.state, form_id, 'last_synchronised_response_token', token_value_last_response)
     atx.write_state()
 
 
@@ -215,16 +221,18 @@ def sync_forms(atx):
         form_type = stream_info[1]
         form_id = stream_info[0]
 
+
         bookmark = atx.state.get('bookmarks', {}).get(form_id, {})
 
         LOGGER.info('form: {} '.format(form_id))
 
         # pull back the form question details
         if form_type == 'questions' and form_id + '_questions'in atx.selected_stream_ids:
+            schemas.load_and_write_schema(stream.tap_stream_id)
             sync_form_definition(atx, form_id)
 
         if form_id in synchronised_forms:
-            continue
+           continue
         should_sync_forms = False
         for stream_name in FORM_STREAMS:
             should_sync_forms = should_sync_forms or form_id + '_' + stream_name in atx.selected_stream_ids
@@ -249,7 +257,7 @@ def sync_forms(atx):
 
 
         token_value_last_response = None #since it is the first call for the current form_id
-        [responses, max_submitted_at, token_value_last_response] = sync_form(atx, form_id, last_date, end_date, token_value_last_response)
+        [responses, max_submitted_at, token_value_last_response] = sync_form(atx, form_id, last_date, end_date, token_value_last_response, form_type)
         # if the max responses were returned, we have to make the call again
         # going to increment the max_submitted_at by 1 second so we don't get dupes,
         # but this also might cause some minor loss of data.
@@ -258,7 +266,7 @@ def sync_forms(atx):
 
         while responses == 1000:
             interim_next_date = max_submitted_at #+ datetime.timedelta(seconds=1) removed the =1 second because we are using the before token filter
-            write_forms_state(atx, form_id, interim_next_date,token_value_last_response)
+            write_forms_state(atx, stream.tap_stream_id, interim_next_date,token_value_last_response)
             [responses, max_submitted_at, token_value_last_response] = sync_form(atx, form_id, interim_next_date, end_date, token_value_last_response)
 
         # if the prior sync is successful it will write the date_to_resume bookmark

@@ -39,7 +39,10 @@ def discover(atx):
 
             meta = metadata.new()
             meta = metadata.write(meta, (), 'table-key-properties', schemas.PK_FIELDS[tap_stream_id_schema])
+            meta = metadata.write(meta, (), 'valid-replication-keys', schemas.REPLICATION_KEY[tap_stream_id_schema])
             meta = metadata.write(meta, (), 'selected', True)
+
+
             # end
 
             for field_name in schema.properties.keys():
@@ -90,10 +93,9 @@ def load_schema(tap_stream_id):
 
 def sync(atx):
     # write schemas for selected streams\
-    for stream in atx.catalog.streams:
-        if stream.tap_stream_id in atx.selected_stream_ids:
+    #for stream in atx.catalog.streams:
+    #    if stream.tap_stream_id in atx.selected_stream_ids:
             # schemas.load_and_write_schema(stream.tap_stream_id)
-            schemas.load_and_write_schema(stream.tap_stream_id)
 
     # since there is only one set of schemas for all forms, they will always be selected
     streams.sync_forms(atx)

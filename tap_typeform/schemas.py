@@ -26,7 +26,11 @@ REPLICATION_METHOD= {
     IDS.ANSWERS: ['INCREMENTAL'],
     IDS.QUESTIONS: ['INCREMENTAL']
 }
-
+REPLICATION_KEY= {
+    IDS.LANDINGS: ['submitted_at'],
+    IDS.ANSWERS: ['submitted_at'],
+    IDS.QUESTIONS: ['submitted_at']
+}
 
 def normalize_fieldname(fieldname):
     fieldname = fieldname.lower()
