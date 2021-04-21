@@ -22,7 +22,7 @@ setup(
     """,
     packages=find_packages(),
     package_data = {
-        "schemas": ["tap_typeform/schemas/*.json"]
+        "schemas": ["tap_typeform/schema/*.json"]
     },
     include_package_data=True
 )

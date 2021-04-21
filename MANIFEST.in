@@ -1,2 +1,2 @@
 include LICENSE
-include tap_typeform/schemas/*.json
+include tap_typeform/schema/*.json

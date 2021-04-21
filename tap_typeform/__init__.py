@@ -8,10 +8,8 @@ import singer
 from singer import utils, metadata
 from singer.catalog import Catalog, CatalogEntry, Schema
 
-import streams
+from tap_typeform import schemas, streams
 from tap_typeform.context import Context
-import schemas
-
 
 REQUIRED_CONFIG_KEYS = ["token"]
 
