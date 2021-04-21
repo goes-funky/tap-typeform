@@ -11,7 +11,10 @@ class MetricsRateLimitException(Exception):
     pass
 
 class Client(object):
-    BASE_URL = 'https://api.typeform.com/forms/FORM_ID/responses'
+
+    # BASE_URL = 'https://api.typeform.com/forms/FORM_ID/responses'
+
+    BASE_URL = 'https://api.typeform.com/forms'
 
     def __init__(self, config):
         self.token = 'Bearer ' + config.get('token')
@@ -19,7 +22,12 @@ class Client(object):
         self.session = requests.Session()
 
     def url(self, form_id):
-        return self.BASE_URL.replace("FORM_ID", form_id)
+        #return self.BASE_URL.replace("FORM_ID", form_id)
+
+        if form_id == 'forms': #return form list
+            return self.BASE_URL  # return all form list
+        else:  #return all responses for current form_id
+            return self.BASE_URL + "/" + form_id + "/responses"
 
     @backoff.on_exception(backoff.expo,
                           RateLimitException,

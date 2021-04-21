@@ -3,7 +3,7 @@ from datetime import datetime, date
 import singer
 from singer import bookmarks as bks_, metadata
 
-from .http import Client
+from  tap_typeform.client import Client
 
 class Context(object):
     """Represents a collection of global objects necessary for performing

@@ -8,13 +8,15 @@ from singer.bookmarks import write_bookmark, reset_stream
 from ratelimit import limits, sleep_and_retry, RateLimitException
 from backoff import on_exception, expo, constant
 
-from .http import MetricsRateLimitException
+from tap_typeform.client import MetricsRateLimitException
 
 LOGGER = singer.get_logger()
 
 MAX_METRIC_JOB_TIME = 1800
 METRIC_JOB_POLL_SLEEP = 1
 FORM_STREAMS = ['landings', 'answers'] #streams that get sync'd in sync_forms
+
+DATE_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
 def count(tap_stream_id, records):
     with singer.metrics.record_counter(tap_stream_id) as counter:
@@ -77,16 +79,19 @@ def get_form_definition(atx, form_id):
 @on_exception(expo, RateLimitException, max_tries=5)
 @sleep_and_retry
 @limits(calls=1, period=6) # 5 seconds needed to be padded by 1 second to work
-def get_form(atx, form_id, start_date, end_date):
+
+
+
+def get_form(atx, form_id, start_date, end_date, token_value_last_response):
     LOGGER.info('Forms query - form: {} start_date: {} end_date: {} '.format(
         form_id,
-        pendulum.from_timestamp(start_date).strftime("%Y-%m-%d %H:%M"),
-        pendulum.from_timestamp(end_date).strftime("%Y-%m-%d %H:%M")))
+        start_date,
+        end_date))
     # the api limits responses to a max of 1000 per call
     # the api doesn't have a means of paging through responses if the number is greater than 1000,
     # so since the order of data retrieved is by submitted_at we have
     # to take the last submitted_at date and use it to cycle through
-    return atx.client.get(form_id, params={'since': start_date, 'until': end_date, 'page_size': 1000})
+    return atx.client.get(form_id, params={'since': start_date, 'until': end_date, 'page_size': 1000, 'before' : token_value_last_response})
 
 def sync_form_definition(atx, form_id):
     with singer.metrics.job_timer('form definition '+form_id):
@@ -114,10 +119,10 @@ def sync_form_definition(atx, form_id):
             "ref": row['ref']
             })
 
-    write_records(atx, 'questions', definition_data_rows)
+    write_records(atx,  form_id + '_questions', definition_data_rows)
 
 
-def sync_form(atx, form_id, start_date, end_date):
+def sync_form(atx, form_id, start_date, end_date, token_value_last_response):
     with singer.metrics.job_timer('form '+form_id):
         start = time.monotonic()
         # we've really moved this functionality to the request in the http script
@@ -126,7 +131,7 @@ def sync_form(atx, form_id, start_date, end_date):
             if (time.monotonic() - start) >= MAX_METRIC_JOB_TIME:
                 raise Exception('Metric job timeout ({} secs)'.format(
                     MAX_METRIC_JOB_TIME))
-            response = get_form(atx, form_id, start_date, end_date)
+            response = get_form(atx, form_id, start_date, end_date, token_value_last_response)
             data = response['items']
             if data != '':
                 break
@@ -146,7 +151,7 @@ def sync_form(atx, form_id, start_date, end_date):
 
         # the schema here reflects what we saw through testing
         # the typeform documentation is subtly inaccurate
-        if 'landings' in atx.selected_stream_ids:
+        if form_id + '_landings' in atx.selected_stream_ids:
             landings_data_rows.append({
                 "landing_id": row['landing_id'],
                 "token": row['token'],
@@ -161,8 +166,9 @@ def sync_form(atx, form_id, start_date, end_date):
             })
 
         max_submitted_dt = row['submitted_at']
+        token_value_last_response = row['token']
 
-        if row.get('answers') and 'answers' in atx.selected_stream_ids:
+        if row.get('answers') and form_id +'_answers' in atx.selected_stream_ids:
             for answer in row['answers']:
                 data_type = answer.get('type')
 
@@ -182,33 +188,46 @@ def sync_form(atx, form_id, start_date, end_date):
                     "answer": answer_value
                 })
 
-    if 'landings' in atx.selected_stream_ids:
-        write_records(atx, 'landings', landings_data_rows)
-    if 'answers' in atx.selected_stream_ids:
-        write_records(atx, 'answers', answers_data_rows)
+    if form_id +'_landings' in atx.selected_stream_ids:
+        write_records(atx, form_id +'_landings', landings_data_rows)
+    if form_id +'_answers' in atx.selected_stream_ids:
+        write_records(atx, form_id + '_answers', answers_data_rows)
 
-    return [response['total_items'], max_submitted_dt]
+    return [response['total_items'], max_submitted_dt, token_value_last_response]
 
 
-def write_forms_state(atx, form, date_to_resume):
-    write_bookmark(atx.state, form, 'date_to_resume', date_to_resume.to_datetime_string())
+def write_forms_state(atx, form, date_to_resume, token_value_last_response):
+   # write_bookmark(atx.state, form, 'date_to_resume', date_to_resume.to_datetime_string())
+    write_bookmark(atx.state, form, 'date_to_resume', date_to_resume)
+    if token_value_last_response is not None:
+        write_bookmark(atx.state, form, 'last_synchronised_response_token', token_value_last_response)
     atx.write_state()
 
-def sync_forms(atx):
-    incremental_range = atx.config.get('incremental_range')
 
-    for form_id in atx.config.get('forms').split(','):
+def sync_forms(atx):
+
+    #for form_id in atx.config.get('forms').split(','):
+
+    synchronised_forms = []
+    for stream in atx.catalog.streams:
+
+        stream_info = stream.tap_stream_id.split("_")
+        form_type = stream_info[1]
+        form_id = stream_info[0]
+
         bookmark = atx.state.get('bookmarks', {}).get(form_id, {})
 
         LOGGER.info('form: {} '.format(form_id))
 
         # pull back the form question details
-        if 'questions'in atx.selected_stream_ids:
+        if form_type == 'questions' and form_id + '_questions'in atx.selected_stream_ids:
             sync_form_definition(atx, form_id)
 
+        if form_id in synchronised_forms:
+            continue
         should_sync_forms = False
         for stream_name in FORM_STREAMS:
-            should_sync_forms = should_sync_forms or (stream_name in atx.selected_stream_ids)
+            should_sync_forms = should_sync_forms or form_id + '_' + stream_name in atx.selected_stream_ids
         if not should_sync_forms:
             continue
 
@@ -217,63 +236,34 @@ def sync_forms(atx):
         #   set to the prior business day/hour before we can use it.
 
         now = datetime.datetime.now()
-        if incremental_range == "daily":
-            s_d = now.replace(hour=0, minute=0, second=0, microsecond=0)
-            start_date = pendulum.parse(atx.config.get('start_date', s_d + datetime.timedelta(days=-1, hours=0)))
-        elif incremental_range == "hourly":
-            s_d = now.replace(minute=0, second=0, microsecond=0)
-            start_date = pendulum.parse(atx.config.get('start_date', s_d + datetime.timedelta(days=0, hours=-1)))
+        today = now.replace(hour=0, minute=0, second=0, microsecond=0).strftime(DATE_FORMAT)
+        start_date = atx.config.get('start_date', today)
+        end_date = today
         LOGGER.info('start_date: {} '.format(start_date))
-
-
-        # end date is not usually specified in the config file by default so end_date is now.
-        # if end date is now, we will have to truncate them
-        # to the nearest day/hour before we can use it.
-        if incremental_range == "daily":
-            e_d = now.replace(hour=0, minute=0, second=0, microsecond=0).strftime("%Y-%m-%d %H:%M:%S")
-            end_date = pendulum.parse(atx.config.get('end_date', e_d))
-        elif incremental_range == "hourly":
-            e_d = now.replace(minute=0, second=0, microsecond=0).strftime("%Y-%m-%d %H:%M:%S")
-            end_date = pendulum.parse(atx.config.get('end_date', e_d))
         LOGGER.info('end_date: {} '.format(end_date))
 
         # if the state file has a date_to_resume, we use it as it is.
         # if it doesn't exist, we overwrite by start date
-        s_d = start_date.strftime("%Y-%m-%d %H:%M:%S")
-        last_date = pendulum.parse(bookmark.get('date_to_resume', s_d))
+        last_date = bookmark.get('date_to_resume', start_date)
         LOGGER.info('last_date: {} '.format(last_date))
 
 
-        # no real reason to assign this other than the naming
-        # makes better sense once we go into the loop
-        current_date = last_date
+        token_value_last_response = None #since it is the first call for the current form_id
+        [responses, max_submitted_at, token_value_last_response] = sync_form(atx, form_id, last_date, end_date, token_value_last_response)
+        # if the max responses were returned, we have to make the call again
+        # going to increment the max_submitted_at by 1 second so we don't get dupes,
+        # but this also might cause some minor loss of data.
+        # there's no ideal scenario here since the API has no other way than using
+        # time ranges to step through data.
 
-        while current_date <= end_date:
-            if incremental_range == "daily":
-                next_date = current_date + datetime.timedelta(days=1, hours=0)
-            elif incremental_range == "hourly":
-                next_date = current_date + datetime.timedelta(days=0, hours=1)
+        while responses == 1000:
+            interim_next_date = max_submitted_at #+ datetime.timedelta(seconds=1) removed the =1 second because we are using the before token filter
+            write_forms_state(atx, form_id, interim_next_date,token_value_last_response)
+            [responses, max_submitted_at, token_value_last_response] = sync_form(atx, form_id, interim_next_date, end_date, token_value_last_response)
 
-            ut_current_date = int(current_date.timestamp())
-            LOGGER.info('ut_current_date: {} '.format(ut_current_date))
-            ut_next_date = int(next_date.timestamp())
-            LOGGER.info('ut_next_date: {} '.format(ut_next_date))
-            [responses, max_submitted_at] = sync_form(atx, form_id, ut_current_date, ut_next_date)
-            # if the max responses were returned, we have to make the call again
-            # going to increment the max_submitted_at by 1 second so we don't get dupes,
-            # but this also might cause some minor loss of data.
-            # there's no ideal scenario here since the API has no other way than using
-            # time ranges to step through data.
-            while responses == 1000:
-                interim_next_date = pendulum.parse(max_submitted_at) + datetime.timedelta(seconds=1)
-                ut_interim_next_date = int(interim_next_date.timestamp())
-                write_forms_state(atx, form_id, interim_next_date)
-                [responses, max_submitted_at] = sync_form(atx, form_id, ut_interim_next_date, ut_next_date)
-
-            # if the prior sync is successful it will write the date_to_resume bookmark
-            write_forms_state(atx, form_id, next_date)
-            current_date = next_date
-
+        # if the prior sync is successful it will write the date_to_resume bookmark
+        write_forms_state(atx, form_id, max_submitted_at, token_value_last_response)
+        synchronised_forms.append(form_id)
         reset_stream(atx.state, 'questions')
         reset_stream(atx.state, 'landings')
         reset_stream(atx.state, 'answers')
