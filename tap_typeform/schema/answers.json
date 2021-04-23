@@ -1,33 +1,60 @@
 {
-    "type": ["null", "object"],
-    "selected": true,
-    "additionalProperties": false,
-    "properties": {
-	"landing_id": {
-	    "type": ["null", "string"],
-	    "selected": true
+	"type": [
+		"null",
+		"object"
+	],
+	"additionalProperties": false,
+	"properties": {
+		"landing_id": {
+			"type": [
+				"null",
+				"string"
+			]
+		},
+		"question_id": {
+			"type": [
+				"null",
+				"string"
+			]
+		},
+		"type": {
+			"type": [
+				"null",
+				"string"
+			]
+		},
+		"ref": {
+			"type": [
+				"null",
+				"string"
+			]
+		},
+		"data_type": {
+			"type": [
+				"null",
+				"string"
+			]
+		},
+		"answer": {
+			"type": [
+				"null",
+				"string"
+			]
+		},
+		"submitted_at": {
+		  "type": [
+			"null",
+			"string"
+		  ],
+		  "format": "date-time"
+		}
 	},
-	"question_id": {
-	    "type": ["null", "string"],
-	    "selected": true
-	},
-      	"type": {
-            "type": ["null", "string"],
-	    "selected": true
-	},
-      	"ref": {
-            "type": ["null", "string"],
-	    "selected": true
-	},
-      	"data_type": {
-            "type": ["null", "string"],
-	    "selected": true
-	},
-      	"answer": {
-            "type": ["null", "string"],
-	    "selected": true
-	}
-    },
-    "key_properties": ["landing_id","question_id"],
-    "bookmark_properties": ["landing_id","question_id"]
+	"key_properties": [
+		"landing_id",
+		"question_id"
+	],
+	"bookmark_properties": [
+		"landing_id",
+		"question_id"
+	]
 }

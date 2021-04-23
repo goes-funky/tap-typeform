@@ -39,8 +39,9 @@ def discover(atx):
 
             meta = metadata.new()
             meta = metadata.write(meta, (), 'table-key-properties', schemas.PK_FIELDS[tap_stream_id_schema])
-            meta = metadata.write(meta, (), 'valid-replication-keys', schemas.REPLICATION_KEY[tap_stream_id_schema])
-            meta = metadata.write(meta, (), 'selected', True)
+            replication_key = schemas.REPLICATION_KEY[tap_stream_id_schema]
+            meta = metadata.write(meta, (), 'valid-replication-keys', replication_key)
+            # meta = metadata.write(meta, (), 'selected', True)
 
 
             # end
@@ -56,17 +57,17 @@ def discover(atx):
             catalog.streams.append(CatalogEntry(
                 stream=tap_stream_id,
                 tap_stream_id=tap_stream_id,
-                replication_method="INCREMENTAL",
+                replication_method=schemas.REPLICATION_METHOD[tap_stream_id_schema],
                 key_properties=schemas.PK_FIELDS[tap_stream_id_schema],
                 schema=schema,
-                metadata=metadata.to_list(meta)
+                metadata=metadata.to_list(meta),
+                replication_key=replication_key
             ))
 
     return catalog
 
 
 def get_form_list(atx):
-    LOGGER.info('Get Form List ...')
     return atx.client.get('forms')
 
 

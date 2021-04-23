@@ -1,24 +1,37 @@
 {
-    "type": ["null", "object"],
-    "selected": true,
-    "additionalProperties": false,
-    "properties": {
-	"form_id": {
-	    "type": ["null", "string"],
-	    "selected": true
+	"type": [
+		"null",
+		"object"
+	],
+	"additionalProperties": false,
+	"properties": {
+		"form_id": {
+			"type": [
+				"null",
+				"string"
+			]
+		},
+		"question_id": {
+			"type": [
+				"null",
+				"string"
+			]
+		},
+		"title": {
+			"type": [
+				"null",
+				"string"
+			]
+		},
+		"ref": {
+			"type": [
+				"null",
+				"string"
+			]
+		}
 	},
-	"question_id": {
-	    "type": ["null", "string"],
-	    "selected": true
-	},
-      	"title": {
-            "type": ["null", "string"],
-	    "selected": true
-	},
-      	"ref": {
-            "type": ["null", "string"],
-	    "selected": true
-	}
-    },
-    "key_properties": ["form_id","question_id"]
+	"key_properties": [
+		"form_id",
+		"question_id"
+	]
 }

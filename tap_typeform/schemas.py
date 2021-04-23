@@ -18,18 +18,18 @@ STATIC_SCHEMA_STREAM_IDS = [
 PK_FIELDS = {
     IDS.LANDINGS: ['landing_id'],
     IDS.ANSWERS: ['landing_id', 'question_id'],
-    IDS.QUESTIONS: ['form_id', 'question_id'],
+    IDS.QUESTIONS: ['form_id', 'question_id']
 }
 
 REPLICATION_METHOD= {
     IDS.LANDINGS: ['INCREMENTAL'],
     IDS.ANSWERS: ['INCREMENTAL'],
-    IDS.QUESTIONS: ['INCREMENTAL']
+    IDS.QUESTIONS: ['FULL_TABLE']
 }
 REPLICATION_KEY= {
     IDS.LANDINGS: ['submitted_at'],
     IDS.ANSWERS: ['submitted_at'],
-    IDS.QUESTIONS: ['submitted_at']
+    IDS.QUESTIONS: []
 }
 
 def normalize_fieldname(fieldname):
