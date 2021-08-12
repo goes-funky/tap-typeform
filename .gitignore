@@ -104,3 +104,4 @@ state.json
 catalog.json
 catalog_Template.json
 stream_bcp.py
+stream.json

@@ -25,45 +25,32 @@ LOGGER = singer.get_logger()
 #  because it's always the same so we just pull it from file we never use
 #  atx in here since the schema is from file but we would use it if we
 #  pulled schema from the API def discover(atx):
-def discover(atx):
+
+def discover():
     catalog = Catalog([])
-    forms_response = get_form_list(atx)
-    form_list = forms_response['items']
-    for form in form_list:
-        for schema_stream_id in schemas.STATIC_SCHEMA_STREAM_IDS:
-            tap_stream_id_schema = schema_stream_id
-            tap_stream_id = form['id'] + "_" + schema_stream_id
-            # print("tap stream id=",tap_stream_id)
+    for tap_stream_id in schemas.STATIC_SCHEMA_STREAM_IDS:
+        schema = Schema.from_dict(schemas.load_schema(tap_stream_id))
+        meta = metadata.new()
+        meta = metadata.write(meta, (), 'table-key-properties', schemas.PK_FIELDS[tap_stream_id])
+        replication_key = schemas.REPLICATION_KEY[tap_stream_id]
+        meta = metadata.write(meta, (), 'valid-replication-keys', replication_key)
 
-            schema = Schema.from_dict(schemas.load_schema(tap_stream_id_schema))
+        for field_name in schema.properties.keys():
+            if field_name in schemas.PK_FIELDS[tap_stream_id]:
+                inclusion = 'automatic'
+            else:
+                inclusion = 'available'
+            meta = metadata.write(meta, ("properties", field_name), 'inclusion', inclusion)
 
-            meta = metadata.new()
-            meta = metadata.write(meta, (), 'table-key-properties', schemas.PK_FIELDS[tap_stream_id_schema])
-            replication_key = schemas.REPLICATION_KEY[tap_stream_id_schema]
-            meta = metadata.write(meta, (), 'valid-replication-keys', replication_key)
-            # meta = metadata.write(meta, (), 'selected', True)
-
-
-            # end
-
-            for field_name in schema.properties.keys():
-                # print("field name=",field_name)
-                if field_name in schemas.PK_FIELDS[tap_stream_id_schema]:
-                    inclusion = 'automatic'
-                else:
-                    inclusion = 'available'
-                meta = metadata.write(meta, ("properties", field_name), 'inclusion', inclusion)
-
-            catalog.streams.append(CatalogEntry(
-                stream=tap_stream_id,
-                tap_stream_id=tap_stream_id,
-                replication_method=schemas.REPLICATION_METHOD[tap_stream_id_schema],
-                key_properties=schemas.PK_FIELDS[tap_stream_id_schema],
-                schema=schema,
-                metadata=metadata.to_list(meta),
-                replication_key=replication_key
-            ))
-
+        catalog.streams.append(CatalogEntry(
+            stream=tap_stream_id,
+            tap_stream_id=tap_stream_id,
+            replication_method=schemas.REPLICATION_METHOD[tap_stream_id],
+            key_properties=schemas.PK_FIELDS[tap_stream_id],
+            schema=schema,
+            metadata=metadata.to_list(meta),
+            replication_key=replication_key
+        ))
     return catalog
 
 
@@ -112,11 +99,11 @@ def main():
     args = utils.parse_args(REQUIRED_CONFIG_KEYS)
     atx = Context(args.config, args.state)
     if args.discover:
-        catalog = discover(atx)
+        catalog = discover()
         catalog.dump()
     else:
         atx.catalog = Catalog.from_dict(args.properties) \
-            if args.properties else discover(atx)
+            if args.properties else discover()
         sync(atx)
 
 

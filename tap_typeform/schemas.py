@@ -47,6 +47,5 @@ def load_schema(tap_stream_id):
     return utils.load_json(get_abs_path(path))
 
 def load_and_write_schema(tap_stream_id):
-    tap_stream_id_schema = tap_stream_id.split("_")[1]
-    schema = load_schema(tap_stream_id_schema)
-    singer.write_schema(tap_stream_id, schema, PK_FIELDS[tap_stream_id_schema])
+    schema = load_schema(tap_stream_id)
+    singer.write_schema(tap_stream_id, schema, PK_FIELDS[tap_stream_id])

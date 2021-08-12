@@ -124,10 +124,10 @@ def sync_form_definition(atx, form_id):
             "ref": row['ref']
             })
 
-    write_records(atx,  form_id + '_questions', definition_data_rows)
+    write_records(atx,  'questions', definition_data_rows)
 
 
-def sync_form(atx, form_id, start_date, end_date, token_value_last_response, form_type):
+def sync_form(atx, form_id, start_date, end_date, token_value_last_response, stream_id):
     with singer.metrics.job_timer('form '+form_id):
         start = time.monotonic()
         # we've really moved this functionality to the request in the http script
@@ -157,53 +157,51 @@ def sync_form(atx, form_id, start_date, end_date, token_value_last_response, for
         max_submitted_dt = row['submitted_at']
         token_value_last_response = row['token']
 
-        if form_type == 'landings':
+        if stream_id == 'landings':
         # the schema here reflects what we saw through testing
         # the typeform documentation is subtly inaccurate
-            if form_id + '_landings' in atx.selected_stream_ids:
-                landings_data_rows.append({
-                    "landing_id": row['landing_id'],
-                    "token": row['token'],
-                    "landed_at": row['landed_at'],
-                    "submitted_at": row['submitted_at'],
-                    "user_agent": row['metadata']['user_agent'],
-                    "platform": row['metadata']['platform'],
-                    "referer": row['metadata']['referer'],
-                    "network_id": row['metadata']['network_id'],
-                    "browser": row['metadata']['browser'],
-                    "hidden": hidden
+            landings_data_rows.append({
+                "landing_id": row['landing_id'],
+                "token": row['token'],
+                "landed_at": row['landed_at'],
+                "submitted_at": row['submitted_at'],
+                "user_agent": row['metadata']['user_agent'],
+                "platform": row['metadata']['platform'],
+                "referer": row['metadata']['referer'],
+                "network_id": row['metadata']['network_id'],
+                "browser": row['metadata']['browser'],
+                "hidden": hidden
+            })
+
+        if stream_id == 'answers':
+            for answer in row['answers']:
+                data_type = answer.get('type')
+
+                if data_type in ['choice', 'choices', 'payment']:
+                    answer_value = json.dumps(answer.get(data_type))
+                elif data_type in ['number', 'boolean']:
+                    answer_value = str(answer.get(data_type))
+                else:
+                    answer_value = answer.get(data_type)
+
+                answers_data_rows.append({
+                    "landing_id": row.get('landing_id'),
+                    "question_id": answer.get('field',{}).get('id'),
+                    "type": answer.get('field',{}).get('type'),
+                    "ref": answer.get('field',{}).get('ref'),
+                    "data_type": data_type,
+                    "answer": answer_value,
+                    "submitted_at": row.get('submitted_at')
                 })
 
-        if form_type == 'answers':
-            if row.get('answers') and form_id +'_answers' in atx.selected_stream_ids:
-                for answer in row['answers']:
-                    data_type = answer.get('type')
 
-                    if data_type in ['choice', 'choices', 'payment']:
-                        answer_value = json.dumps(answer.get(data_type))
-                    elif data_type in ['number', 'boolean']:
-                        answer_value = str(answer.get(data_type))
-                    else:
-                        answer_value = answer.get(data_type)
+    if  stream_id == 'landings':
+        schemas.load_and_write_schema('landings')
+        write_records(atx, "landings", landings_data_rows)
 
-                    answers_data_rows.append({
-                        "landing_id": row.get('landing_id'),
-                        "question_id": answer.get('field',{}).get('id'),
-                        "type": answer.get('field',{}).get('type'),
-                        "ref": answer.get('field',{}).get('ref'),
-                        "data_type": data_type,
-                        "answer": answer_value,
-                        "submitted_at": row.get('submitted_at')
-                    })
-
-
-    if  form_type == 'landings' and form_id +'_landings' in atx.selected_stream_ids:
-        schemas.load_and_write_schema(form_id +'_landings')
-        write_records(atx, form_id + '_landings', landings_data_rows)
-
-    if form_type == 'answers' and form_id +'_answers' in atx.selected_stream_ids:
-        schemas.load_and_write_schema(form_id + '_answers')
-        write_records(atx, form_id + '_answers', answers_data_rows)
+    if stream_id == 'answers':
+        schemas.load_and_write_schema('answers')
+        write_records(atx, "answers", answers_data_rows)
 
     return [response['total_items'], max_submitted_dt, token_value_last_response]
 
@@ -218,60 +216,54 @@ def write_forms_state(atx, form_id, date_to_resume, token_value_last_response):
 
 def sync_forms(atx):
 
-    #for form_id in atx.config.get('forms').split(','):
+    for form in atx.client.get("forms")["items"]:
+        for stream in atx.catalog.streams:
 
-    for stream in atx.catalog.streams:
+            form_id = form["id"]
 
-        stream_info = stream.tap_stream_id.split("_")
-        form_type = stream_info[1]
-        form_id = stream_info[0]
+            bookmark = atx.state.get('bookmarks', {}).get(form_id, {})
 
+            LOGGER.info('form: {} '.format(form_id))
 
-        bookmark = atx.state.get('bookmarks', {}).get(stream.tap_stream_id, {})
+            # pull back the form question details
+            if stream.tap_stream_id == 'questions':
+                schemas.load_and_write_schema(stream.tap_stream_id)
+                sync_form_definition(atx, form_id)
 
-        LOGGER.info('form: {} '.format(form_id))
+            # start_date is defaulted in the config file 2018-01-01
+            # if there's no default date and it gets set to now, then start_date will have to be
+            #   set to the prior business day/hour before we can use it.
 
-        # pull back the form question details
-        if form_type == 'questions' and form_id + '_questions'in atx.selected_stream_ids:
-            schemas.load_and_write_schema(stream.tap_stream_id)
-            sync_form_definition(atx, form_id)
+            now = datetime.datetime.now()
+            today = now.replace(hour=0, minute=0, second=0, microsecond=0).strftime(DATE_FORMAT)
+            start_date = datetime.datetime.strptime(atx.config.get('start_date', today),DATE_FORMAT).replace(hour=0, minute=0, second=0, microsecond=0).strftime(DATE_FORMAT)
+            end_date = today
+            LOGGER.info('start_date: {} '.format(start_date))
+            LOGGER.info('end_date: {} '.format(end_date))
 
-        if stream.tap_stream_id not in atx.selected_stream_ids:
-            continue
-
-        # start_date is defaulted in the config file 2018-01-01
-        # if there's no default date and it gets set to now, then start_date will have to be
-        #   set to the prior business day/hour before we can use it.
-
-        now = datetime.datetime.now()
-        today = now.replace(hour=0, minute=0, second=0, microsecond=0).strftime(DATE_FORMAT)
-        start_date = datetime.datetime.strptime(atx.config.get('start_date', today),DATE_FORMAT).replace(hour=0, minute=0, second=0, microsecond=0).strftime(DATE_FORMAT)
-        end_date = today
-        LOGGER.info('start_date: {} '.format(start_date))
-        LOGGER.info('end_date: {} '.format(end_date))
-
-        # if the state file has a date_to_resume, we use it as it is.
-        # if it doesn't exist, we overwrite by start date
-        last_date = bookmark.get('date_to_resume', start_date)
-        LOGGER.info('last_date: {} '.format(last_date))
+            # if the state file has a date_to_resume, we use it as it is.
+            # if it doesn't exist, we overwrite by start date
+            last_date = bookmark.get('date_to_resume', start_date)
+            LOGGER.info('last_date: {} '.format(last_date))
 
 
-        token_value_last_response = bookmark.get('last_synchronised_response_token',None)  #since it is the first call for the current form_id
-        [responses, max_submitted_at, token_value_last_response] = sync_form(atx, form_id, last_date, end_date, token_value_last_response, form_type)
-        # if the max responses were returned, we have to make the call again
-        # going to increment the max_submitted_at by 1 second so we don't get dupes,
-        # but this also might cause some minor loss of data.
-        # there's no ideal scenario here since the API has no other way than using
-        # time ranges to step through data.
+            token_value_last_response = bookmark.get('last_synchronised_response_token', None)  #since it is the first call for the current form_id
+            [responses, max_submitted_at, token_value_last_response] = sync_form(atx, form_id, last_date, end_date, token_value_last_response, stream.tap_stream_id)
+            # if the max responses were returned, we have to make the call again
+            # going to increment the max_submitted_at by 1 second so we don't get dupes,
+            # but this also might cause some minor loss of data.
+            # there's no ideal scenario here since the API has no other way than using
+            # time ranges to step through data.
 
-        while responses > RESPONSE_PAGE_SIZE:
-            interim_next_date = max_submitted_at #+ datetime.timedelta(seconds=1) removed the =1 second because we are using the before token filter
-            write_forms_state(atx, stream.tap_stream_id, interim_next_date,token_value_last_response)
-            [responses, max_submitted_at, token_value_last_response] = sync_form(atx, form_id, interim_next_date, end_date, token_value_last_response,form_type)
+            while responses > RESPONSE_PAGE_SIZE:
+                interim_next_date = max_submitted_at #+ datetime.timedelta(seconds=1) removed the =1 second because we are using the before token filter
+                write_forms_state(atx, form_id, interim_next_date,token_value_last_response)
+                [responses, max_submitted_at, token_value_last_response] = sync_form(atx, form_id, interim_next_date, end_date, token_value_last_response,stream.tap_stream_id)
 
-        # if the prior sync is successful it will write the date_to_resume bookmark
-        write_forms_state(atx, stream.tap_stream_id, max_submitted_at, token_value_last_response)
+            # if the prior sync is successful it will write the date_to_resume bookmark
+            write_forms_state(atx, form_id, max_submitted_at, token_value_last_response)
+            # token_value_last_response = None
 
-        #reset_stream(atx.state, 'questions')
-        #reset_stream(atx.state, 'landings')
-        #reset_stream(atx.state, 'answers')
+            #reset_stream(atx.state, 'questions')
+            #reset_stream(atx.state, 'landings')
+            #reset_stream(atx.state, 'answers')
