@@ -17,6 +17,12 @@
 				"string"
 			]
 		},
+		"form_id": {
+			"type": [
+				"null",
+				"string"
+			]
+		},
 		"type": {
 			"type": [
 				"null",

@@ -163,6 +163,7 @@ def sync_form(atx, form_id, start_date, end_date, token_value_last_response, str
             landings_data_rows.append({
                 "landing_id": row['landing_id'],
                 "token": row['token'],
+                "form_id": form_id,
                 "landed_at": row['landed_at'],
                 "submitted_at": row['submitted_at'],
                 "user_agent": row['metadata']['user_agent'],
@@ -188,6 +189,7 @@ def sync_form(atx, form_id, start_date, end_date, token_value_last_response, str
                     "landing_id": row.get('landing_id'),
                     "question_id": answer.get('field',{}).get('id'),
                     "type": answer.get('field',{}).get('type'),
+                    "form_id": form_id,
                     "ref": answer.get('field',{}).get('ref'),
                     "data_type": data_type,
                     "answer": answer_value,

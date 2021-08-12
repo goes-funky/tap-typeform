@@ -11,6 +11,12 @@
         "string"
       ]
     },
+    "form_id": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
     "token": {
       "type": [
         "null",
