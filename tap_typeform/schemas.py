@@ -8,28 +8,34 @@ class IDS(object):
     LANDINGS = 'landings'
     ANSWERS = 'answers'
     QUESTIONS = 'questions'
+    FORMS = 'forms'
 
 STATIC_SCHEMA_STREAM_IDS = [
     IDS.LANDINGS,
     IDS.ANSWERS,
-    IDS.QUESTIONS
+    IDS.QUESTIONS,
+    IDS.FORMS
 ]
 
 PK_FIELDS = {
     IDS.LANDINGS: ['landing_id'],
     IDS.ANSWERS: ['landing_id', 'question_id'],
-    IDS.QUESTIONS: ['form_id', 'question_id']
+    IDS.QUESTIONS: ['form_id', 'question_id'],
+    IDS.FORMS: ['id']
 }
 
 REPLICATION_METHOD= {
     IDS.LANDINGS: ['INCREMENTAL'],
     IDS.ANSWERS: ['INCREMENTAL'],
-    IDS.QUESTIONS: ['FULL_TABLE']
+    IDS.QUESTIONS: ['FULL_TABLE'],
+    IDS.FORMS: ['FULL_TABLE']
+
 }
 REPLICATION_KEY= {
     IDS.LANDINGS: ['submitted_at'],
     IDS.ANSWERS: ['submitted_at'],
-    IDS.QUESTIONS: []
+    IDS.QUESTIONS: [],
+    IDS.FORMS: []
 }
 
 def normalize_fieldname(fieldname):

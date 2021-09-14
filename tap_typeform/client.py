@@ -46,7 +46,6 @@ class Client(object):
             response = requests.request(method, self.url(form_id).replace('/responses', ''), **kwargs)
         else:
             response = requests.request(method, self.url(form_id), **kwargs)
-        #print('final3 url=',response.url)
 
         if response.status_code in [429, 503]:
             raise RateLimitException()
