@@ -182,26 +182,28 @@ def sync_form_data(atx, form_id, start_date, end_date, token_value_last_response
             })
 
         if stream_id == 'answers':
-            for answer in row['answers']:
-                data_type = answer.get('type')
+            if row['answers'] is not None:
+                for answer in row['answers']:
+                    data_type = answer.get('type')
 
-                if data_type in ['choice', 'choices', 'payment']:
-                    answer_value = json.dumps(answer.get(data_type))
-                elif data_type in ['number', 'boolean']:
-                    answer_value = str(answer.get(data_type))
-                else:
-                    answer_value = answer.get(data_type)
+                    if data_type in ['choice', 'choices', 'payment']:
+                        answer_value = json.dumps(answer.get(data_type))
+                    elif data_type in ['number', 'boolean']:
+                        answer_value = str(answer.get(data_type))
+                    else:
+                        answer_value = answer.get(data_type)
 
-                answers_data_rows.append({
-                    "landing_id": row.get('landing_id'),
-                    "question_id": answer.get('field', {}).get('id'),
-                    "type": answer.get('field', {}).get('type'),
-                    "form_id": form_id,
-                    "ref": answer.get('field', {}).get('ref'),
-                    "data_type": data_type,
-                    "answer": answer_value,
-                    "submitted_at": row.get('submitted_at')
-                })
+                    answers_data_rows.append({
+                        "landing_id": row.get('landing_id'),
+                        "question_id": answer.get('field', {}).get('id'),
+                        "type": answer.get('field', {}).get('type'),
+                        "form_id": form_id,
+                        "ref": answer.get('field', {}).get('ref'),
+                        "data_type": data_type,
+                        "answer": answer_value,
+                        "submitted_at": row.get('submitted_at')
+                    })
+
 
     if stream_id == 'landings':
         schemas.load_and_write_schema('landings')
