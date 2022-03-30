@@ -128,8 +128,21 @@ def sync_form_definition(atx, form_id):
             "form_id": form_id,
             "question_id": row['id'],
             "title": row['title'],
-            "ref": row['ref']
+            "ref": row['ref'],
+            "parent_question_id": ''
         })
+
+        # treat subquestions if is a question group
+        child_questions = row.get('properties', {}).get('fields', [])
+
+        for child_question in child_questions:
+            definition_data_rows.append({
+                "form_id": form_id,
+                "question_id": child_question['id'],
+                "title": child_question['title'],
+                "ref": child_question['ref'],
+                "parent_question_id": row['id']
+            })
 
     write_records(atx, 'questions', definition_data_rows)
 
@@ -269,12 +282,15 @@ def get_forms_data(atx, forms):
 
             now = datetime.datetime.now()
             today = now.replace(hour=0, minute=0, second=0, microsecond=0).strftime(DATE_FORMAT)
+            tomorrow = now + datetime.timedelta(days=1)
+            tomorrow = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0).strftime(DATE_FORMAT)
+
             start_date = datetime.datetime.strptime(atx.config.get('start_date', today), DATE_FORMAT).replace(hour=0,
                                                                                                               minute=0,
                                                                                                               second=0,
                                                                                                               microsecond=0).strftime(
                 DATE_FORMAT)
-            end_date = today
+            end_date = tomorrow
             LOGGER.info('start_date: {} '.format(start_date))
             LOGGER.info('end_date: {} '.format(end_date))
 

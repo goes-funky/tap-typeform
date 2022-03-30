@@ -28,6 +28,12 @@
 				"null",
 				"string"
 			]
+		},
+		"parent_question_id": {
+			"type": [
+				"null",
+				"string"
+			]
 		}
 	},
 	"key_properties": [
