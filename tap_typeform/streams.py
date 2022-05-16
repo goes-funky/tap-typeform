@@ -1,6 +1,7 @@
 import time
 import datetime
 import json
+import pytz
 
 import pendulum
 import singer
@@ -280,24 +281,25 @@ def get_forms_data(atx, forms):
             # if there's no default date and it gets set to now, then start_date will have to be
             #   set to the prior business day/hour before we can use it.
 
-            now = datetime.datetime.now()
+            now = datetime.datetime.now(pytz.utc)
             today = now.replace(hour=0, minute=0, second=0, microsecond=0).strftime(DATE_FORMAT)
-            tomorrow = now + datetime.timedelta(days=1)
-            tomorrow = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0).strftime(DATE_FORMAT)
 
             start_date = datetime.datetime.strptime(atx.config.get('start_date', today), DATE_FORMAT).replace(hour=0,
                                                                                                               minute=0,
                                                                                                               second=0,
                                                                                                               microsecond=0).strftime(
                 DATE_FORMAT)
-            end_date = tomorrow
-            LOGGER.info('start_date: {} '.format(start_date))
-            LOGGER.info('end_date: {} '.format(end_date))
+
+            end_date = now + datetime.timedelta(days=1)
+            end_date = end_date.replace(hour=0, minute=0, second=0, microsecond=0).strftime(DATE_FORMAT)
+
 
             # if the state file has a date_to_resume, we use it as it is.
             # if it doesn't exist, we overwrite by start date
             last_date = bookmark.get('date_to_resume', start_date)
             LOGGER.info('last_date: {} '.format(last_date))
+            LOGGER.info('start_date: {} '.format(last_date))
+            LOGGER.info('end_date: {} '.format(end_date))
 
             token_value_last_response = bookmark.get('last_synchronised_response_token',
                                                      None)  # since it is the first call for the current form_id
