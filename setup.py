@@ -14,7 +14,7 @@ setup(
         "pendulum",
         "ratelimit",
         "backoff==1.3.2",
-        "requests==2.20.0",
+        "requests==2.26.0",
     ],
     entry_points="""
     [console_scripts]
@@ -26,3 +26,4 @@ setup(
     },
     include_package_data=True
 )
+
