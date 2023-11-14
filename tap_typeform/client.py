@@ -47,7 +47,7 @@ class Client(object):
         else:
             response = requests.request(method, self.url(form_id), **kwargs)
 
-        if response.status_code in [429, 503]:
+        if response.status_code in [429, 502, 503]:
             raise RateLimitException()
         if response.status_code == 423:
             raise MetricsRateLimitException()

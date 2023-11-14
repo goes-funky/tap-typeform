@@ -14,7 +14,7 @@ from tap_typeform.client import MetricsRateLimitException
 LOGGER = singer.get_logger()
 
 MAX_METRIC_JOB_TIME = 1800
-RESPONSE_PAGE_SIZE = 1000
+RESPONSE_PAGE_SIZE = 800
 METRIC_JOB_POLL_SLEEP = 1
 FORM_STREAMS = ['landings', 'answers']  # streams that get sync'd in sync_forms
 
